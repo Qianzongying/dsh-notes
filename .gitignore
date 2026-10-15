@@ -1,0 +1,28 @@
+# ---- 系统与编辑器 ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# ---- 临时文件 ----
+*.tmp
+*.bak
+*.log
+~$*
+
+# ---- 依赖目录 ----
+node_modules/
+__pycache__/
+venv/
+.venv/
+
+# ---- 密钥与凭证（永远不要提交）----
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+credentials.json
+secrets.json
