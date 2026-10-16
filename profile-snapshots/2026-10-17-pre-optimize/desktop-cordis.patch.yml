@@ -1,0 +1,240 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: deepseek-account
+    model: deepseek-flash
+    reasoningEffort: high
+- id: ui-settings-account
+  name: "@deepseek-ai/dsh-client-ui-settings-account"
+  config:
+    version: 1
+    step: done
+    purpose: office
+    process: compact
+    completion: completed
+    usage: compact
+    developerTools: false
+- id: ui-chat
+  name: "@deepseek-ai/dsh-client-ui-chat"
+  config:
+    transcriptView: compact
+    performanceUsage: compact
+- id: ui-settings
+  name: "@deepseek-ai/dsh-client-ui-settings"
+  config:
+    enabled: false
+- id: plugin-marketplace
+  name: dsh-plugin-marketplace
+  config:
+    inventory:
+      profile: desktop
+      packages:
+        - name: "@deepseek-ai/dsh-base"
+          version: ""
+          managed: false
+          bundle: true
+        - name: "@deepseek-ai/dsh-experimental-auto-review"
+          version: ""
+          managed: false
+          bundle: true
+        - name: "@deepseek-ai/dsh-experimental-voice-input-bundle"
+          version: ""
+          managed: false
+          bundle: true
+        - name: "@deepseek-ai/dsh-web-app"
+          version: ""
+          managed: false
+          bundle: true
+        - name: "@linxin666/dsh-client-ui-skill-explorer"
+          version: 0.4.6
+          managed: true
+          bundle: true
+        - name: "@linxin666/dsh-remote-web-ui"
+          version: 0.4.6
+          managed: true
+          bundle: true
+        - name: "@liustack/modlens"
+          version: 3.26.6
+          managed: true
+          bundle: false
+        - name: "@liustack/modsearch"
+          version: 5.10.6
+          managed: true
+          bundle: true
+        - name: "@michengai/dsh-agency-agents"
+          version: 1.0.19
+          managed: true
+          bundle: true
+        - name: "@michengai/dsh-archive-manager"
+          version: 1.0.19
+          managed: true
+          bundle: true
+        - name: "@michengai/dsh-codex-ui"
+          version: 1.1.38
+          managed: true
+          bundle: true
+        - name: "@michengai/dsh-im-connect"
+          version: 0.1.76
+          managed: true
+          bundle: true
+        - name: "@michengai/dsh-skills-manager"
+          version: 1.1.21
+          managed: true
+          bundle: true
+        - name: "@tt-a1i/archify-dsh"
+          version: 1.0.0
+          managed: true
+          bundle: true
+        - name: "@vectorize-io/hindsight-coding-agents"
+          version: 0.8.1
+          managed: true
+          bundle: false
+        - name: "@wxg-prc-cpg/browser-skill-dsh-plugin"
+          version: 0.3.2
+          managed: true
+          bundle: true
+        - name: billion-context
+          version: 0.1.197
+          managed: true
+          bundle: true
+        - name: dsh-better-sidebar
+          version: 0.26.0
+          managed: true
+          bundle: true
+        - name: dsh-context
+          version: 0.71.0
+          managed: true
+          bundle: true
+        - name: dsh-cost-meter
+          version: 1.8.26
+          managed: true
+          bundle: true
+        - name: dsh-free-search
+          version: 0.8.10
+          managed: true
+          bundle: true
+        - name: dsh-mnemon
+          version: 0.5.29
+          managed: true
+          bundle: true
+        - name: dsh-plugin-marketplace
+          version: 0.5.3
+          managed: true
+          bundle: true
+        - name: dsh-univer-office
+          version: 0.3.7
+          managed: true
+          bundle: true
+        - name: dsh-vision-router
+          version: 3.0.3
+          managed: true
+          bundle: true
+        - name: dsh-whale-widget
+          version: 0.4.2
+          managed: true
+          bundle: true
+        - name: dshmarket
+          version: 1.66.22
+          managed: true
+          bundle: true
+        - name: lunheng-article-pipeline
+          version: 19.6.0
+          managed: true
+          bundle: true
+- id: vision-router
+  name: dsh-vision-router
+  config:
+    progressiveTools: false
+    onboardingSeen: true
+- id: modlens
+  disabled: true
+- id: agency-agents
+  name: "@michengai/dsh-agency-agents"
+  # 用户决定（2026-10-16）：关闭但保留安装（包仍在 node_modules，未卸载）。
+  # 理由：启用的 10 位专家里有 7 位是医疗行政/计费/营销类（medical-billing-coding-specialist、
+  # healthcare-marketing-compliance…），对「大三医学生」的 7 项用途零相关；而它每次调用都要
+  # 注入约 1.3K 字符的专家团提示段 + 6 个工具的 JSON Schema。
+  # 想恢复：删掉下面这行 disabled: true 即可。
+  disabled: true
+  config:
+    enabled:
+      - academic-study-planner
+      - chief-technology-officer
+      - design-image-prompt-engineer
+      - engineering-knowledge-graph-engineer
+      - healthcare-clinical-evidence-agent
+      - healthcare-sovereign-health-systems-agent
+      - healthcare-innovation-strategist
+      - healthcare-customer-service
+      - medical-billing-coding-specialist
+      - healthcare-marketing-compliance
+    customExperts: []
+- id: hindsight
+  disabled: true
+- id: browserskill
+  name: "@wxg-prc-cpg/browser-skill-dsh-plugin"
+  config:
+    # Absolute path on purpose: the running DSH app was launched before
+    # ~/.local/bin was added to the user PATH, so a bare `bsk` may not resolve.
+    bskPath: 'C:\Users\qianz\.local\bin\bsk.exe'
+# Repair for a dangling web provider. The @liustack/modsearch bundle layer
+# patches this row with `searchProvider: modsearch`; disabling the modsearch
+# row (above) does not remove that config patch, so nothing registers the
+# provider and every web_search fails with
+#   configured web provider "modsearch" is not registered
+# Restating the dsh-base defaults makes a disabled plugin degrade to the
+# official provider instead of breaking search. dsh-free-search then takes
+# the search seam over at runtime (see its cordis.patch.yml notes).
+- id: web
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: http
+- id: ui-skill-explorer
+  disabled: true
+- id: plugin-marketplace
+  disabled: true
+- id: openwrite-bundle
+  disabled: true
+- id: openwrite-bridge
+  disabled: true
+- id: studio-panel
+  disabled: true
+- id: openwrite-dog
+  disabled: true
+# ── 用户决定（2026-10-16）：以下两项「关闭但保留安装」（包仍在 node_modules）──
+#
+# agency-agents-remote：随 @michengai/dsh-agency-agents 一起插入的 api-gateway 路由行。
+#   主行 agency-agents 已在上面 disabled，同步关掉它以免留下悬空引用。
+- id: agency-agents-remote
+  disabled: true
+
+#
+# lunheng-article-pipeline：论衡长文流水线，共叠加 4 行
+#   （包入口 + 三档 subagent 工具 tool-subagent-retrieval / -strong / -audit）。
+#   关它的硬理由：它的 peer 范围是 `>=0.1.2-rc.1 <0.2.0`，而本机跑的是 0.2.0-rc.2 ——
+#   被该范围排除，属于「装上了但官方不支持」，是下次 DSH 更新时最容易炸的一项。
+#   想恢复：删掉这 4 行 disabled: true（包还在 node_modules 里，没卸载）。
+- id: lunheng-article-pipeline
+  disabled: true
+- id: tool-subagent-retrieval
+  disabled: true
+- id: tool-subagent-strong
+  disabled: true
+- id: tool-subagent-audit
+  disabled: true
+- id: ui-theme
+  name: "@deepseek-ai/dsh-client-ui-theme"
+  config:
+    preference: light
+- id: michengai-codex-pet
+  disabled: true
+- id: remote-web-ui
+  disabled: true
+- id: agent-preset-registry
+  name: "@deepseek-ai/dsh-agent-preset-registry"
+  config:
+    default: standard
+    selectedDefault: ptc

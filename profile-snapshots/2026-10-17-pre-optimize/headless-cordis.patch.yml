@@ -1,0 +1,11 @@
+﻿# 本机补丁（2026-10-16 由 DSH agent 添加 —— 为「刷B站」的 headless 那一轮供模型）
+# 默认走 deepseek-official，而本机没有 DEEPSEEK_API_KEY（桌面端用的是订阅账号 deepseek-account）,
+# 于是 headless 一起来就报：MISSING_CREDENTIAL: llm-deepseek: no API key for provider route "deepseek-official"
+# 这里把默认模型改成和桌面端一致（provider: deepseek-account / deepseek-flash），
+# 凭证由 @deepseek-ai/dsh-deepseek-account-platform 从 ~/.dsh/.credentials.yaml 读。
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: deepseek-account
+    model: deepseek-flash
+    reasoningEffort: high
