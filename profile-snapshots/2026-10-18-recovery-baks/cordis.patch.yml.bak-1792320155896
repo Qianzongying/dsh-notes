@@ -1,0 +1,182 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: deepseek-account
+    model: deepseek-flash
+    reasoningEffort: high
+- id: ui-settings-account
+  name: "@deepseek-ai/dsh-client-ui-settings-account"
+  config:
+    version: 1
+    step: done
+    purpose: office
+    process: compact
+    completion: completed
+    usage: compact
+    developerTools: false
+- id: ui-chat
+  name: "@deepseek-ai/dsh-client-ui-chat"
+  config:
+    transcriptView: compact
+    performanceUsage: compact
+- id: ui-settings
+  name: "@deepseek-ai/dsh-client-ui-settings"
+  config:
+    enabled: false
+- id: vision-router
+  name: dsh-vision-router
+  config:
+    progressiveTools: false
+    onboardingSeen: true
+- id: agency-agents
+  name: "@michengai/dsh-agency-agents"
+  # 用户决定（2026-10-16）：关闭但保留安装（包仍在 node_modules，未卸载）。
+  # 理由：启用的 10 位专家里有 7 位是医疗行政/计费/营销类（medical-billing-coding-specialist、
+  # healthcare-marketing-compliance…），对「大三医学生」的 7 项用途零相关；而它每次调用都要
+  # 注入约 1.3K 字符的专家团提示段 + 6 个工具的 JSON Schema。
+  # 想恢复：删掉下面这行 disabled: true 即可。
+  disabled: true
+  config:
+    enabled:
+      - academic-study-planner
+      - chief-technology-officer
+      - design-image-prompt-engineer
+      - engineering-knowledge-graph-engineer
+      - healthcare-clinical-evidence-agent
+      - healthcare-sovereign-health-systems-agent
+      - healthcare-innovation-strategist
+      - healthcare-customer-service
+      - medical-billing-coding-specialist
+      - healthcare-marketing-compliance
+    customExperts: []
+- id: browserskill
+  name: "@wxg-prc-cpg/browser-skill-dsh-plugin"
+  config:
+    # Absolute path on purpose: the running DSH app was launched before
+    # ~/.local/bin was added to the user PATH, so a bare `bsk` may not resolve.
+    bskPath: 'C:\Users\qianz\.local\bin\bsk.exe'
+# Repair for a dangling web provider. The @liustack/modsearch bundle layer
+# patches this row with `searchProvider: modsearch`; disabling the modsearch
+# row (above) does not remove that config patch, so nothing registers the
+# provider and every web_search fails with
+#   configured web provider "modsearch" is not registered
+# Restating the dsh-base defaults makes a disabled plugin degrade to the
+# official provider instead of breaking search. dsh-free-search then takes
+# the search seam over at runtime (see its cordis.patch.yml notes).
+- id: web
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: http
+- id: openwrite-bundle
+  disabled: true
+- id: openwrite-bridge
+  disabled: true
+- id: studio-panel
+  disabled: true
+- id: openwrite-dog
+  disabled: true
+# ── 用户决定（2026-10-16）：以下两项「关闭但保留安装」（包仍在 node_modules）──
+#
+# agency-agents-remote：随 @michengai/dsh-agency-agents 一起插入的 api-gateway 路由行。
+#   主行 agency-agents 已在上面 disabled，同步关掉它以免留下悬空引用。
+- id: agency-agents-remote
+  disabled: true
+
+#
+# lunheng-article-pipeline：论衡长文流水线，共叠加 4 行
+#   （包入口 + 三档 subagent 工具 tool-subagent-retrieval / -strong / -audit）。
+#   关它的硬理由：它的 peer 范围是 `>=0.1.2-rc.1 <0.2.0`，而本机跑的是 0.2.0-rc.2 ——
+#   被该范围排除，属于「装上了但官方不支持」，是下次 DSH 更新时最容易炸的一项。
+#   想恢复：删掉这 4 行 disabled: true（包还在 node_modules 里，没卸载）。
+- id: ui-theme
+  name: "@deepseek-ai/dsh-client-ui-theme"
+  config:
+    preference: light
+- id: agent-preset-registry
+  name: "@deepseek-ai/dsh-agent-preset-registry"
+  config:
+    default: standard
+    selectedDefault: standard
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2026-10-17 全面体检后的精简（可逆，快照见 dsh-notes/profile-snapshots/2026-10-17-pre-optimize/）
+#
+# 1) 关掉 dsh-builtin-browser 的电子载体与工具层：本机没有可用 Electron 二进制，
+#    实测 dsh_browser_session 报「browser provider(s) electron are registered but report
+#    themselves unavailable … no spawnable Electron binary was found」，其 28 个
+#    dsh_browser_* 工具在全部 70 个历史会话里零调用。
+#    想恢复：删掉下面两行，并在该 profile 里跑 npx install-electron（或设置 ELECTRON_PATH）。
+# 2) 清掉 10 条「悬挂补丁」——它们对应的包已不在 dsh.profile.bundles，
+#    每次启动都会打印 'patch: entry "X" not found' 警告，删除不影响任何行为：
+#    modlens / hindsight / ui-skill-explorer / plugin-marketplace（重复的两段）/
+#    lunheng-article-pipeline / tool-subagent-retrieval / -strong / -audit /
+#    michengai-codex-pet / remote-web-ui。
+# 3) ui-settings 的 config.enabled: false 保持原样：该行真实存在且设置页可用，
+#    改动收益≈0 而风险非零，故只在报告里记录。
+# ─────────────────────────────────────────────────────────────────────────────
+- id: browser-electron
+  disabled: true
+
+- id: tool-browser
+  disabled: true
+- id: mnemon
+  name: dsh-mnemon
+  config:
+    remoteAccess: read-only
+    timeoutMs: 10000
+    defaultRecallLimit: 10
+    embedding:
+      enabled: false
+      endpoint: http://localhost:11434
+      model: nomic-embed-text
+    recallQuality:
+      policy: strict-v1
+      lowScoreThreshold: 0.25
+      highScoreThreshold: 0.6
+      candidateMultiplier: 3
+      maxMediumResults: 4
+      maxUnknownResults: 2
+    routingGuidance: true
+    tabEnabled: true
+    writeEnabled: true
+    lifecycleEnabled: true
+    recallMode: guided
+    writebackMode: guided
+    idleReviewMs: 30000
+    persistenceStrategy:
+      mode: automatic
+      providerId: mnemon-native
+      prompt: ""
+      rules:
+        allowedProviderIds:
+          - mnemon-native
+        dataBoundary: allow-remote
+        requiredCapabilities: []
+        preference: balanced
+      providerConnections: {}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2026-10-17 用户决定：「关掉客户端插件热更新通道」= 本次修复的核心一行。
+#
+# 为什么：dsh-client-hmr 把宿主插件图实时推给已打开的页面（/plugins/events）。
+# 某条目从图里消失时，浏览器侧会 invalidate 该模块并 removeOwnedStyles()
+# 删掉它的 <style data-plugin> 样式；文案明确写「失败时不回滚」。于是运行期
+# 装/更新/停用带 UI 的插件，可能停在「组件在、CSS 没了」的半挂状态 —— 本机
+# 左侧侧栏已 3 次渲染成原生灰框按钮，只有整应用重启能恢复（刷新无效，因为
+# 宿主的包元数据按 specifier 缓存到重启）。
+#
+# 关掉后：页面不再跟随插件图变化；装/停/更新插件都不再即时热挂载，下次启动
+# DSH 才生效。这是「可预测」换掉了「会半挂」。
+# 代价：市场里点安装后看不到即时变化（要重启）；插件列表里的启停开关同理。
+# 回滚：删掉下面这两行，重启 DSH。
+# 配套：C:\Users\qianz\.dsh\autoupdate\ 的空闲看门狗（每 5 分钟，键鼠空闲
+# 满 10 分钟才动手）依赖这一行关闭，否则更新会热挂载进正在显示的页面。
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 2026-10-18 用户要求恢复热更新：上面已移除 `- id: client-hmr / disabled: true`，
+# client-hmr 重新随 dsh-web-app 挂载（页面会实时跟随插件图变化）。
+# 注意：运行期装/更新带 UI 的插件时，可能再次出现「组件在、CSS 没了」的侧栏样式故障；
+# 真出现时把这两行加回去即可（或直接重启应用）。
