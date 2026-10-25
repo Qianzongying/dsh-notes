@@ -19,6 +19,9 @@
 | 9 | 2026-10-25 | PowerShell 脚本存成无 BOM UTF-8 → 中文乱码 | 低 |
 | 10 | 2026-10-25 | 想当然以为 git 能推 GitHub → 13 个提交躺在本地 10 天没上去 | 高 |
 | 11 | 2026-10-25 | 用 write 工具写 `.ps1`（无 BOM）→ PS 5.1 按 ANSI 解析中文，语法错误 13 处 | 中 |
+| 12 | 2026-10-25 | 往会话日志注入事件被宿主裁掉 → 侧栏仍不显示（真正读的是 projcache） | 中 |
+| 13 | 2026-10-25 | 自动升级死循环：跳过时写 state 冲掉 `lastUpdateDay`，每 5 分钟当「今天第一次」重跑 | 高 |
+| 14 | 2026-10-25 | node 18+ 的 `spawnSync` 直接跑 `.cmd` 报 `EINVAL`（CVE-2024-27980 后不再允许） | 中 |
 
 ---
 
@@ -109,3 +112,42 @@
 **根因**：会话日志由宿主按自己的提交/释放机制管理，外部追加的事件不被视为「已提交」；而侧栏列表读的是投影缓存。
 
 **判据**：①想判断一个会话为什么不显示，先看 projcache 的 `blank`/`lastPromptAt`，不要先动日志；②要动 projcache 就把两个 row 一起改——`sessionListMetadata {ver:1, seq:<该文件最大 seq>, val:{blank:false, lastPromptAt:<ms>}}` 与 `titleInput {ver:3, seq:<同>, val:{first:{seq:<事件seq>, text:<首句>}, count:1, lastSeq:<同>}}`，写前备份 `.bak-blank-<时间戳>`、写后回读校验类型；③脚本：`C:\Users\qianz\.dsh\tools\fix-session-blank.mjs`。
+
+## 13. 自动升级死循环：跳过写盘把「今天已升过」冲掉（高）
+
+**我干了什么**：10 月给 `C:\Users\qianz\.dsh\autoupdate\update-agent.mjs` 加过两道门（日历日 `lastUpdateDay`、市场 busy 检查），但没检查 `writeState()` 在「跳过」分支的行为，也没做失败记忆。
+
+**后果**：日志 `C:\Users\qianz\.dsh\autoupdate\log\2026-10-25.log` 里出现稳定四步循环——`start: daily run (今天第一次)` → `planned 2` → `FAIL … skin-maid-atelier … state=running` → `abort remaining 1: market busy` → `done: ok 0, failed 1` → 下一 tick `skip: market busy`（**这次 skip 把 `lastUpdateDay` 覆盖掉了**）→ 再下一 tick 又「今天第一次」。一天的 13:47/14:02/14:16/14:36 四次原样重演，永远 ok 0。
+
+**根因（三个叠加）**：
+1. `writeState()` 只在 `outcome` 为 `done`/`nothing` 时写 `lastUpdateDay`；`skipped` 分支整份覆盖 state.json ⇒ 日历日标记丢失。**这是死循环的引擎**。
+2. 市场 `/updates/summary` 对 npm 源整体漏报（实测只报 2 个 github 皮肤，而 npm 上真实有 13 个新版），且两个皮肤被解析成**同一个 commit**（`dshm_outdated` 对它们报「网络错误」）⇒ 唯一被计划的恰好是两个升不动的包。
+3. 单包失败后下一轮 `gates()` 撞到 `market busy`（失败操作会把市场留在 busy 几分钟）就 `break`，整批放弃。
+
+**修法（已落地，备份 `.bak-20261025-loopfix` / `.bak-npmdiff-*`）**：
+- 跳过分支也继承已有 `lastUpdateDay`（`else if (!payload.lastUpdateDay)` 段读旧文件）。
+- 升级计划改成 **市场 summary ∪ npm registry 对差**（`npmOutdated()`，并发 6，`registry.npmjs.org/<enc>` 取 `dist-tags.latest`，只处理 profile `dependencies` 里能解析成 semver 的条目 ⇒ `github:`/`file:` 源自动排除）。
+- 失败记忆 `failedEver` + 当日 `failedDay`：`state.json` 持久化，同一包失败 ≥3 次进 `QUARANTINE`（日志显式写 `QUARANTINE <pkg>`）；`state=running`/`PLUGIN_RUNNING`/`in use` 视为**结构性失败**，第一次就隔离（宿主在跑时它永远升不成功）。
+- 瞬时状态（`market busy`/`host not ready`/`status unreadable`）改为 `waitGates()` 退避重试 7×30s，其余失败只记录不中断整批。
+- `--retry-failed` 解除当日黑名单；`--no-npm` 关掉 npm 对差。
+
+**判据**：① 任何「每天一次」的限流标记，**跳过分支也必须把它继承到新 state**，否则限流等于没有；② 计划来源只有一个上游时，先验证这个上游本身可信（这次是市场漏报 + 把两个包指向同一 commit）；③ 「失败后立刻整批放弃」+「无失败记忆」= 无限重试，两者必须同时修。
+
+## 14. node 18+ 不允许直接 spawn `.cmd`（中）
+
+- **现象**：`execFileSync("C:\Users\qianz\.dsh\tools\bin\ffprobe.cmd", [...])` 抛 `Error: spawnSync …ffprobe.cmd EINVAL`（`errno: -4071`），stderr 里 `status: null, pid: 0`，看起来像「文件不存在」其实不是。
+- **根因**：CVE-2024-27980 之后 Node 不允许不经 shell 直接执行 `.cmd`/`.bat`。
+- **判据**：脚本里调 ffmpeg/ffprobe 这类包装脚本时，**直接解析真 `.exe` 路径**（本机 `…\WinGet\Packages\Gyan.FFmpeg_…\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe`），并用 glob 兜底版本目录；只有给人双击的 `.cmd` 才保留 `.cmd` 形态。
+
+## 15. 把「文件还原器」当急救器宣传（极高，2026-10-25）
+
+**我做错了什么**：`DSH急救`（restore-dsh.ps1）只会还原文件，我却当成"打不开就找它"。这次打不开的真实原因是登录 cookie 累积到 71 条、Cookie 请求头 16,754 字节超过 Host 的 16 KiB 上限 → 431 → `desktop welcome: Web authentication failed`。它一条都治不了：它要求先关掉 DSH（打不开时进程还活着、cookie 库被独占锁，实测 `unable to open database file`），备份里没有 cookie 库，也没有 `session_projcache`，第 1 项"体检"只查 json 能否解析。
+
+**后果**：用户在最需要的时候点了一个没用的按钮，最后靠另一个 agent（Cherry Studio）手工清 cookie 才修好。备份本身没坏，是我的**能力边界描述**错了。
+
+**判据**：
+1. 急救程序第 1 步必须是**诊断**，并按真实故障概率排序：登录 cookie 条数 → 进程能否握手 → 插件层是否被重置 → 配置文件语法。不能只查配置文件。
+2. 急救必须能在"进程还活着"时动手（先结束进程再解锁），否则永远死在第一步。
+3. 一次性凭据要在**启动前**清（`dsh-launch.ps1` 每次启动前跑 prune），不要等它攒爆再救。
+4. 备份清单要按**用户能感知的现象**逐条对齐：「左侧会话不见了」存在 `storages\session_projcache`，不在 `sessions`。
+5. 对外说"这个能救命"之前，先问自己：**它救的是哪一类故障？另外几类它管不管？** 管不了就直说。
