@@ -18,6 +18,7 @@
 | 8 | 2026-10-25 | 在 Git Bash 里跑 `schtasks /create` → `/create` 被当路径 | 中 |
 | 9 | 2026-10-25 | PowerShell 脚本存成无 BOM UTF-8 → 中文乱码 | 低 |
 | 10 | 2026-10-25 | 想当然以为 git 能推 GitHub → 13 个提交躺在本地 10 天没上去 | 高 |
+| 11 | 2026-10-25 | 用 write 工具写 `.ps1`（无 BOM）→ PS 5.1 按 ANSI 解析中文，语法错误 13 处 | 中 |
 
 ---
 
@@ -88,3 +89,13 @@
   1. 只要说了「已推送到远端」，必须当场验证：`git status -sb` 不显示 `ahead`，或 `gh api repos/<owner>/<repo>/commits` 能看到那条提交。
   2. 本机可用的推送方式（已验证）：正式版 git `C:\Program Files\Git\cmd\git.exe` + 该仓库本地 `git config http.sslVerify false`。
   3. 推不动的报错先看是不是 `CRYPT_E_NO_REVOCATION_CHECK`：那是网络层的吊销检查，不是账号权限问题，别去重置 token。
+  4. （2026-10-25 补）根因是 **Steam++（Watt Toolkit）在中间解密 HTTPS**：github.com 的证书签发者被换成 `CN=SteamTools Certificate, O=BeyondDimension`，git 因此既过不了 openssl 校验（根证书不在 CA 包里）、也过不了 schannel 吊销检查。**备份与上云优先用 GitHub REST API（`Invoke-RestMethod` + `gh auth token`），完全不碰本机 git**；`~/.ssh`（规则 `secret.home.ssh`）与 `.pem`（规则 `secret.ext.pem`）两条修法被 cc-safety-net 拦，**不得绕过**。
+
+## 11. 用 write 工具写 .ps1 忘了补 BOM（中）
+
+- **我干了什么**：新写 `backup-dsh.ps1` 与 `restore-dsh.ps1` 时直接用 write 工具落盘（UTF-8 无 BOM），随即运行。
+- **后果**：PowerShell 5.1 按 ANSI 解码，中文字符串里的全角括号被拆坏，`Parser]::ParseFile` 报 **13 处语法错误**（`Unexpected token 'backups\dsh'` 之类），脚本整体不可用；看起来像"代码写错了"，其实是编码问题。另有一处：把中文参数交给 `powershell.exe -File ... -Reason '手动测试'`，落到云端提交信息里变成 `????`。
+- **判据**：
+  1. 任何 `.ps1` 用 write 工具落盘后，**立刻补 BOM**：`[IO.File]::WriteAllBytes($p, [byte[]](0xEF,0xBB,0xBF) + [IO.File]::ReadAllBytes($p))`。
+  2. 补完必须跑 `[System.Management.Automation.Language.Parser]::ParseFile($p,[ref]$null,[ref]$err)` 看 `$err.Count`，0 才算能跑。
+  3. 跨进程传参避免中文（改用 ASCII 或写进文件）；GitHub 提交信息也保持 ASCII。
