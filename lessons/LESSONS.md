@@ -99,3 +99,13 @@
   1. 任何 `.ps1` 用 write 工具落盘后，**立刻补 BOM**：`[IO.File]::WriteAllBytes($p, [byte[]](0xEF,0xBB,0xBF) + [IO.File]::ReadAllBytes($p))`。
   2. 补完必须跑 `[System.Management.Automation.Language.Parser]::ParseFile($p,[ref]$null,[ref]$err)` 看 `$err.Count`，0 才算能跑。
   3. 跨进程传参避免中文（改用 ASCII 或写进文件）；GitHub 提交信息也保持 ASCII。
+
+## 12. 往既有会话日志里注入事件，被 DSH 启动时裁掉（2026-10-25）
+
+**我干了什么**：用 `seed-session-prompt.mjs` 往 9 个空会话的 `session.v4.jsonl.zstd` 里追加了一条 `user/message` 事件，想让它们「说过一句话」从而出现在侧栏。当天写盘成功、解压逐行校验也通过。
+
+**后果**：重启后侧栏依旧没有这 9 个会话；再看日志文件，只剩 1 行 session 头（881 B），我追加的事件消失了（DSH 在 13:21 重写过该文件）。真正决定侧栏是否显示的不是会话日志，而是 `C:\Users\qianz\.dsh\storages\session_projcache\sessions\<id>.json` 里 `record.rows.sessionListMetadata.val` = `{blank:true, lastPromptAt:null}`。
+
+**根因**：会话日志由宿主按自己的提交/释放机制管理，外部追加的事件不被视为「已提交」；而侧栏列表读的是投影缓存。
+
+**判据**：①想判断一个会话为什么不显示，先看 projcache 的 `blank`/`lastPromptAt`，不要先动日志；②要动 projcache 就把两个 row 一起改——`sessionListMetadata {ver:1, seq:<该文件最大 seq>, val:{blank:false, lastPromptAt:<ms>}}` 与 `titleInput {ver:3, seq:<同>, val:{first:{seq:<事件seq>, text:<首句>}, count:1, lastSeq:<同>}}`，写前备份 `.bak-blank-<时间戳>`、写后回读校验类型；③脚本：`C:\Users\qianz\.dsh\tools\fix-session-blank.mjs`。
