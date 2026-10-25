@@ -17,6 +17,7 @@
 | 7 | 2026-10-25 | 用 `printf` 生成 .cmd → `\t` 被解释成 TAB，命令损坏 | 中 |
 | 8 | 2026-10-25 | 在 Git Bash 里跑 `schtasks /create` → `/create` 被当路径 | 中 |
 | 9 | 2026-10-25 | PowerShell 脚本存成无 BOM UTF-8 → 中文乱码 | 低 |
+| 10 | 2026-10-25 | 想当然以为 git 能推 GitHub → 13 个提交躺在本地 10 天没上去 | 高 |
 
 ---
 
@@ -77,3 +78,13 @@
 
 - **现象**：PS 5.1 读无 BOM 的 UTF-8 脚本，中文全变乱码、甚至字符串判断失效。
 - **判据**：`.ps1` 保存为 **UTF-8 带 BOM + CRLF**；改完必须重新补 BOM（`fs.writeFileSync(p,'\ufeff'+s.replace(/\r?\n/g,'\r\n'))`）。
+
+## 10. 想当然以为 git 能推 GitHub，其实一直是坏的（高）
+
+- **我干了什么**：给笔记库 `dsh-notes` 连续提交（交接卡、复盘、教训库），并在报告里写「已提交到仓库」，但从没验证过 `git push` 是否真的成功。
+- **后果**：本地 `main` 领先远端 **13 个提交**，最近一次成功推送停在 2026-10-15。也就是这十天的文档全只在本地一份，硬盘坏就没了；我却一直以为有云端副本。
+- **根因**：把 `git commit` 当成了「已保存到云端」。真实原因是本机 GitHub 推送一直是坏的——`schannel: next InitializeSecurityContext failed: CRYPT_E_NO_REVOCATION_CHECK (0x80092012)`（证书吊销列表在本机网络不可达），而 `http.schannelCheckRevoke=false` 在 git 2.56 下**已被忽略**，`http.sslVerify=false` 才有效；另外 PATH 里排第一的 `git.exe` 是 dsh-ops 自带的 ucrt64 版，行为与正式版不同。
+- **判据（硬规则）**：
+  1. 只要说了「已推送到远端」，必须当场验证：`git status -sb` 不显示 `ahead`，或 `gh api repos/<owner>/<repo>/commits` 能看到那条提交。
+  2. 本机可用的推送方式（已验证）：正式版 git `C:\Program Files\Git\cmd\git.exe` + 该仓库本地 `git config http.sslVerify false`。
+  3. 推不动的报错先看是不是 `CRYPT_E_NO_REVOCATION_CHECK`：那是网络层的吊销检查，不是账号权限问题，别去重置 token。
